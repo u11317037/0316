@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音樂互動視覺藝術 - 初階版</title>
+    <style>
+        /* 基礎樣式設定 */
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #121212; /* 深色背景更有藝術感 */
+            color: white;
+            font-family: sans-serif;
+            overflow: hidden;
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            text-align: center;
+            z-index: 10;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 1rem;
+            background-color: #00ffcc;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #00cca3;
+            transform: scale(1.05);
+        }
+
+        /* 這是我們要互動的方塊 */
+        #visualBox {
+            width: 150px;
+            height: 150px;
+            background-color: #00ffcc;
+            border-radius: 10px;
+            box-shadow: 0 0 50px rgba(0, 255, 204, 0.5);
+            /* 重要：確保縮放效果從中心發散 */
+            transform: scale(1);
+            will-change: transform;
+        }
+
+        p {
+            margin-top: 15px;
+            opacity: 0.6;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-container">
+        <button id="playBtn">START MUSIC</button>
+        <p>請確保目錄下有 music.mp3 檔案</p>
+    </div>
+
+    <div id="visualBox"></div>
+
+    <script>
+        const playBtn = document.getElementById('playBtn');
+        const visualBox = document.getElementById('visualBox');
+        
+        let audioCtx;
+        let analyser;
+        let source;
+        let dataArray;
+        let animationId;
+        let isPlaying = false;
+        let audio = new Audio('music.mp3');
+
+        // 初始化音訊分析器
+        function setupAudio() {
+            // 建立音訊環境 (AudioContext)
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // 建立分析器節點 (AnalyserNode)
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 256; // 決定分析的精細度
+            
+            // 將音訊檔案與環境連結
+            source = audioCtx.createMediaElementSource(audio);
+            
+            // 設定節點連接路徑：音源 -> 分析器 -> 喇叭
+            source.connect(analyser);
+            analyser.connect(audioCtx.destination);
+            
+            // 建立存放頻率數據的陣列
+            const bufferLength = analyser.frequencyBinCount;
+            dataArray = new Uint8Array(bufferLength);
+        }
+
+        // 動畫循環函式
+        function renderFrame() {
+            // 取得當前的頻率數據（0-255）
+            analyser.getByteFrequencyData(dataArray);
+
+            // 我們取前 10 個低頻數據的平均值，因為低音（鼓聲）最適合帶動視覺跳動
+            let sum = 0;
+            const segment = 10;
+            for (let i = 0; i < segment; i++) {
+                sum += dataArray[i];
+            }
+            const average = sum / segment;
+
+            // 將 0-255 的數值映射到縮放比例 (例如 1.0 到 2.5 倍)
+            const scale = 1 + (average / 170);
+            
+            // 套用縮放效果
+            visualBox.style.transform = `scale(${scale})`;
+            
+            // 也可以順便根據音量改變亮度
+            visualBox.style.filter = `brightness(${1 + average / 255})`;
+
+            // 持續執行動畫
+            animationId = requestAnimationFrame(renderFrame);
+        }
+
+        // 按鈕點擊事件
+        playBtn.addEventListener('click', () => {
+            // 瀏覽器要求必須在使用者點擊後才能啟動 AudioContext
+            if (!audioCtx) setupAudio();
+
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            if (!isPlaying) {
+                audio.play().then(() => {
+                    playBtn.innerText = 'PAUSE';
+                    isPlaying = true;
+                    renderFrame();
+                }).catch(err => {
+                    alert("找不到 music.mp3 檔案，請確認檔案路徑！");
+                });
+            } else {
+                audio.pause();
+                playBtn.innerText = 'START MUSIC';
+                isPlaying = false;
+                cancelAnimationFrame(animationId);
+            }
+        });
+
+        // 音樂播完後重設按鈕
+        audio.onended = () => {
+            isPlaying = false;
+            playBtn.innerText = 'START MUSIC';
+            cancelAnimationFrame(animationId);
+            visualBox.style.transform = `scale(1)`;
+        };
+    </script>
+</body>
+</html>
